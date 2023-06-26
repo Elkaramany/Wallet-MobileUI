@@ -1,0 +1,55 @@
+export const ImagePath = {
+  logo: require("../Config/assets/images/logo.png"),
+
+  //General icons
+  backArrow: require("../Config/assets/images/backArrow.png"),
+  eye: require("../Config/assets/images/eye.png"),
+  eyeWhite: require("../Config/assets/images/eyeWhite.png"),
+  hiddenEye: require("../Config/assets/images/hiddenEye.png"),
+  redExclamation: require("../Config/assets/images/redExclamation.png"),
+  progress1: require("../Config/assets/images/progress1.png"),
+  progress2: require("../Config/assets/images/progress2.png"),
+  progress3: require("../Config/assets/images/progress3.png"),
+  gradientInfo: require("../Config/assets/images/gradientInfo.png"),
+  checkerFalse: require("../Config/assets/images/checkerFalse.png"),
+  checkerTrue: require("../Config/assets/images/checkerTrue.png"),
+  success: require("../Config/assets/images/success.png"),
+  strongLine: require("../Config/assets/images/strongLine.png"),
+  blurredRectangle: require("../Config/assets/images/blurredRectangle.png"),
+  gradientProgress: require("../Config/assets/images/gradientProgress.png"),
+  grayProgress: require("../Config/assets/images/grayProgress.png"),
+  rightArrow: require("../Config/assets/images/rightArrow.png"),
+  leftArrow: require("../Config/assets/images/leftArrow.png"),
+  gradientRectangle: require("../Config/assets/images/gradientRectangle.png"),
+  delete: require("../Config/assets/images/delete.png"),
+  qrCode: require("../Config/assets/images/qrCode.png"),
+
+  //Bottom Tab Bar icons
+  walletFocused: require("../Config/assets/images/walletFocused.png"),
+  walletUnFocused: require("../Config/assets/images/walletUnFocused.png"),
+  swapFocused: require("../Config/assets/images/swapUnFocused.png"),
+  swapUnFocused: require("../Config/assets/images/swapUnFocused.png"),
+  settingsFocused: require("../Config/assets/images/settingsFocused.png"),
+  settingsUnFocused: require("../Config/assets/images/settingsUnFocused.png"),
+
+  //Wallet icons
+  menu: require("../Config/assets/images/menu.png"),
+  downArrow: require("../Config/assets/images/downArrow.png"),
+  checkedGradient: require("../Config/assets/images/checkedGradient.png"),
+  copy: require("../Config/assets/images/copy.png"),
+  send: require("../Config/assets/images/send.png"),
+  receive: require("../Config/assets/images/receive.png"),
+  buy: require("../Config/assets/images/buy.png"),
+  bnbCoin: require("../Config/assets/images/bnbCoin.png"),
+  sendGradient: require("../Config/assets/images/sendGradient.png"),
+  receiveGradient: require("../Config/assets/images/receiveGradient.png"),
+  scan: require("../Config/assets/images/scan.png"),
+  exchange: require("../Config/assets/images/exchange.png"),
+  edit: require("../Config/assets/images/edit.png"),
+  share: require("../Config/assets/images/share.png"),
+  link: require("../Config/assets/images/link.png"),
+
+  //Collectibles icons
+  audio: require("../Config/assets/images/audio.png"),
+  image: require("../Config/assets/images/image.png"),
+};

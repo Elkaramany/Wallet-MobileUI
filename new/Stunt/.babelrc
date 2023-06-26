@@ -1,0 +1,20 @@
+{
+    "plugins": [
+        [
+            "module-resolver",
+            {
+                "alias": {
+                    "*": "./src/*",
+                    "@Config": "./src/Config",
+                    "@Components": "./src/Components",
+                    "@Navigation": "./src/Navigation",
+                    "@Screens": "./src/Screens",
+                    "@Redux": "./src/Redux",
+                    "@ReduxTypes": "./src/Redux/reduxTypes.ts",
+                    "@ReduxAuth": "./src/Redux/Reducers/AuthSlice",
+                    "@Assets": "./src/Assets"
+                }
+            }
+        ]
+    ]
+}

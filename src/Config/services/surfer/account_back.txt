@@ -1,0 +1,369 @@
+import * as nearAPI from 'near-api-js';
+
+import {Direction, TxDetails, TxKind, TxStatus} from '../types/transaction';
+import {
+  FT_MINIMUM_STORAGE_BALANCE,
+  FT_MINIMUM_STORAGE_BALANCE_LARGE,
+  FT_STORAGE_DEPOSIT_GAS,
+  FT_TRANSFER_DEPOSIT,
+  FT_TRANSFER_GAS,
+} from '../Const';
+import {KeyPair, connect, utils} from 'near-api-js';
+import {
+  createConnection,
+  rpcQuery,
+  sendJsonRpc,
+  viewFunction,
+} from '../utils/RpcUtils';
+import {generateSeedPhrase, parseSeedPhrase} from '../utils/seed-phrase';
+import {getAccountId, getFungibleToken, getNonFungibleToken} from '../Api';
+
+import {AccessKeys} from '../types/access-keys';
+import BN from 'bn.js';
+import {FungibleTokenMetadata} from '../types/FT';
+import {NonFungibleTokenMetadata} from '../types/NFT';
+import {PublicKey} from 'near-api-js/lib/utils';
+import {WalletAccount} from '../types/wallet-account';
+import {config} from '../Config';
+import {toImplicit} from '../utils/utils';
+
+/**
+ * Create Unfunded Account
+ * @returns
+ */
+export async function createImplicitAccount(): Promise<WalletAccount> {
+  return await generateSeedPhrase().then(account => {
+    return {
+      publicKey: account.publicKey,
+      secretKey: account.secretKey,
+      seedPhrase: account.seedPhrase,
+      isImplicit: true,
+      implicitAccountId: toImplicit(account.publicKey),
+      signerKeys: new Array<KeyPair>(),
+    };
+  });
+}
+
+export async function validateSeedPhrase(seedPhrase: string) {
+  const bip39 = await import('bip39');
+  return bip39.validateMnemonic(seedPhrase);
+}
+/**
+ * Restore Account From Seed Phrase
+ * @param seedPhrase
+ * @returns
+ */
+export async function importAccountFromSeedPhrase(
+  seedPhrase: string,
+): Promise<WalletAccount> {
+  let account = await parseSeedPhrase(seedPhrase);
+  let accountIds = await getAccountId(account.publicKey);
+  // console.log(accountIds);
+  return {
+    publicKey: account.publicKey,
+    secretKey: account.secretKey,
+    seedPhrase: account.seedPhrase,
+    isImplicit: accountIds.length === 0 ? true : false,
+    implicitAccountId: toImplicit(account.publicKey),
+    accountId: accountIds.length === 0 ? undefined : accountIds[0],
+    signerKeys: new Array<KeyPair>(),
+  };
+}
+
+/**
+ * Check if accountId is available
+ * @param accountId
+ * @returns
+ */
+export const checkAccountId = async (accountId: string): Promise<boolean> => {
+  return await rpcQuery(accountId, 'view_account')
+    .then(() => {
+      return true;
+    })
+    .catch((err: string) => {
+      if (err.includes('does not exist while viewing')) return false;
+      return true;
+    });
+};
+
+/**
+ * Reserve a .near accountId
+ * @param accountId
+ * @param publicKey
+ * @param account
+ */
+export async function CreateAccountId(
+  payerWalletAccount: WalletAccount,
+  newAccountId: string,
+  newWalletAccount: WalletAccount,
+): Promise<void> {
+  let keyStore = new nearAPI.keyStores.InMemoryKeyStore();
+  await keyStore.setKey(
+    config.networkId,
+    newWalletAccount.accountId || newWalletAccount.implicitAccountId,
+    KeyPair.fromString(newWalletAccount.secretKey.replace('ed25519:', '')),
+  );
+  let near = await connect({
+    keyStore: keyStore,
+    networkId: config.networkId,
+    nodeUrl: config.nodeUrl,
+    helperUrl: config.helperUrl,
+    headers: {},
+  });
+
+  near
+    .createAccount(newAccountId, PublicKey.from(newWalletAccount.publicKey))
+    .then(data => console.log('CreateAccountId: ', data))
+    .catch(error => console.log('CreateAccountId: ', error));
+}
+
+/**
+ * list access keys for a given account
+ * @param accountId
+ */
+export const listAccessKeys = async (
+  walletAccount: WalletAccount,
+): Promise<AccessKeys[]> => {
+  let accountAccessKeys = new Array<AccessKeys>();
+  let near = await connect({
+    keyStore: new nearAPI.keyStores.InMemoryKeyStore(),
+    networkId: config.networkId,
+    nodeUrl: config.nodeUrl,
+    headers: {},
+  });
+  let account = await near.account(
+    walletAccount.accountId || walletAccount.implicitAccountId,
+  );
+
+  return account
+    .getAccessKeys()
+    .then(accessKeys => {
+      for (let key of accessKeys)
+        typeof key.access_key.permission === 'string'
+          ? (accountAccessKeys = [
+              ...accountAccessKeys,
+              {
+                accessKey: {
+                  nonce: key.access_key.nonce,
+                  permission: key.access_key.permission,
+                },
+                publicKey: key.public_key,
+              },
+            ])
+          : [];
+      return accountAccessKeys;
+    })
+    .catch(() => {
+      return new Array<AccessKeys>();
+    });
+};
+
+export const parseFungibleTokenForWalletAccount = async (
+  walletAccount: WalletAccount,
+) => {
+  let ftTokens = await getFungibleToken(walletAccount);
+
+  const ftMethodOptions = {
+    viewMethods: ['ft_total_supply', 'ft_metadata'],
+    changeMethods: [],
+  };
+
+  const near = await createConnection(walletAccount);
+  const payerWalletAccount = new nearAPI.Account(
+    near.connection,
+    walletAccount.accountId || walletAccount.implicitAccountId,
+  );
+
+  for (let ftToken of ftTokens) {
+    let contract = new nearAPI.Contract(
+      payerWalletAccount,
+      ftToken,
+      ftMethodOptions,
+    );
+
+    const fungibleTokenMetadata: FungibleTokenMetadata =
+      //@ts-ignore
+      await contract.ft_metadata({
+        accountId: walletAccount.accountId || walletAccount.implicitAccountId,
+      });
+
+    console.log('fungibleTokenMetadata for ', ftToken, fungibleTokenMetadata);
+  }
+};
+
+export const parseNonFungibleTokenForWalletAccount = async (
+  walletAccount: WalletAccount,
+) => {
+  let nftTokens = await getNonFungibleToken(walletAccount);
+
+  const nftMethodOptions = {
+    viewMethods: ['nft_total_supply', 'nft_metadata'],
+    changeMethods: [],
+  };
+  const near = await createConnection(walletAccount);
+  const payerWalletAccount = new nearAPI.Account(
+    near.connection,
+    walletAccount.accountId || walletAccount.implicitAccountId,
+  );
+
+  for (let nftToken of nftTokens) {
+    let contract = new nearAPI.Contract(
+      payerWalletAccount,
+      nftToken,
+      nftMethodOptions,
+    );
+
+    const nonFungibleTokenMetadata: NonFungibleTokenMetadata =
+      //@ts-ignore
+      await contract.nft_metadata({
+        accountId: walletAccount.accountId || walletAccount.implicitAccountId,
+      });
+    console.log(
+      'nonFungibleTokenMetadata for ',
+      nftToken,
+      nonFungibleTokenMetadata,
+    );
+  }
+};
+
+/**
+ * parse a given tx
+ * @param hash
+ * @param signerId
+ * @returns
+ */
+export const parseTx = async (hash: string, signerId: string): Promise<any> => {
+  return await sendJsonRpc('tx', [hash, signerId]).then((data: any) => {
+    return data;
+  });
+};
+
+export const sendMoneyForNear = async (
+  payerWalletAccount: WalletAccount,
+  destinationId: string,
+  amount: string,
+): Promise<nearAPI.providers.FinalExecutionOutcome> => {
+  let near = await createConnection(payerWalletAccount);
+  let yoctoAmount = utils.format.parseNearAmount(amount)!;
+
+  return (
+    await near.account(
+      payerWalletAccount.accountId || payerWalletAccount.implicitAccountId,
+    )
+  ).sendMoney(destinationId, new BN(yoctoAmount));
+};
+
+export const getStorageBalance = async (
+  contractName: string,
+  accountId: string,
+) => {
+  return await viewFunction(contractName, 'storage_balance_of', {
+    account_id: accountId,
+  });
+};
+
+export const isStorageBalanceAvailable = async (
+  contractName: string,
+  accountId: string,
+): Promise<boolean> => {
+  const storageBalance = await getStorageBalance(contractName, accountId);
+  return storageBalance?.total !== undefined;
+};
+
+export const sendMoneyForFungibleToken: any = async (
+  payerWalletAccount: WalletAccount,
+  destinationAccountId: string,
+  contractName: string,
+  amount: string,
+  memo: string = 'Happy Surfer Wallet Transfer',
+) => {
+  let near = await createConnection(payerWalletAccount);
+  let payerAccount = new nearAPI.Account(
+    near.connection,
+    payerWalletAccount.accountId || payerWalletAccount.implicitAccountId,
+  );
+  const storageAvailable = await isStorageBalanceAvailable(
+    contractName,
+    destinationAccountId,
+  );
+  if (!storageAvailable)
+    transferStorageDeposit(
+      payerWalletAccount,
+      contractName,
+      destinationAccountId,
+      new BN(FT_MINIMUM_STORAGE_BALANCE),
+    )
+      .then(tx => {
+        console.log('transferStorageDeposit MINIMUM tx: ', tx);
+      })
+      .catch((error: string) => {
+        if (error.toString().includes('attached deposit is less than')) {
+          transferStorageDeposit(
+            payerWalletAccount,
+            contractName,
+            destinationAccountId,
+            new BN(FT_MINIMUM_STORAGE_BALANCE_LARGE),
+          )
+            .then(tx => {
+              console.log('transferStorageDeposit LARGE tx: ', tx);
+            })
+            .catch(error => console.log(error));
+        }
+      });
+
+  //@ts-ignore
+  // prettier-ignore
+  payerAccount.signAndSendTransaction({
+    receiverId: contractName,
+    actions: [
+      nearAPI.transactions.functionCall(
+        'ft_transfer',
+        {
+          amount,
+          memo: memo,
+          receiver_id: destinationAccountId,
+        },
+        new BN(FT_TRANSFER_GAS),
+        new BN(FT_TRANSFER_DEPOSIT),
+      ),
+    ],
+  })
+    .then(tx => console.log('signAndSendTransaction tx: ', tx))
+    .catch(error => console.log('signAndSendTransaction error: ', error));
+};
+
+export const sendMoneyForNonFungibleToken: any = async (
+  payerWalletAccount: WalletAccount,
+  destinationId: string,
+  contractId: string,
+) => {
+  const near = await createConnection(payerWalletAccount);
+};
+
+export const transferStorageDeposit = async (
+  payerWalletAccount: WalletAccount,
+  contractName: string,
+  receiverId: string,
+  storageDepositAmount: BN,
+): Promise<nearAPI.providers.FinalExecutionOutcome> => {
+  let near = await createConnection(payerWalletAccount);
+  let payerAccount = new nearAPI.Account(
+    near.connection,
+    payerWalletAccount.accountId || payerWalletAccount.implicitAccountId,
+  );
+  //@ts-ignore
+  return await payerAccount.signAndSendTransaction({
+    receiverId: contractName,
+    actions: [
+      nearAPI.transactions.functionCall(
+        'storage_deposit',
+        {
+          account_id: receiverId,
+          registration_only: true,
+        },
+        new BN(FT_STORAGE_DEPOSIT_GAS),
+        storageDepositAmount,
+      ),
+    ],
+  });
+};
